@@ -1,0 +1,10 @@
+/* Tailwind로 커버 안 되는 소량 커스텀만 유지 */
+/* bottom-sheet 등장 애니메이션 */
+@keyframes sheet-in {
+  from { transform: translateY(40px); opacity: 0.6; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.sheet-in { animation: sheet-in 0.18s ease-out; }
+
+/* iOS Safari 하단 안전영역 */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }

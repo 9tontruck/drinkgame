@@ -1,0 +1,1 @@
+{"dependencies":{"dotenv":"^16.4.5","express":"^4.19.2","mysql2":"^3.9.1","socket.io":"^4.7.5"},"description":"파티게임 — 실시간 투표 게임 (Node.js 단일 프로세스)","license":"UNLICENSED","main":"server.js","name":"drinkgame","scripts":{"start":"node server.js"},"version":"1.0.0"}
