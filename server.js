@@ -6,6 +6,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const mysql = require('mysql2/promise');
 const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -32,6 +33,38 @@ function fail(res, msg, code = 400) {
 function ok(res, data = {}) {
   res.json({ ok: true, ...data });
 }
+
+// ---------- 액션 로깅 (CloudWatch) ----------
+// user_action + error만 기록. debug/info는 저장하지 않음.
+const LOG_FILE = process.env.ACTION_LOG_FILE || '/var/log/drinkgame/app.log';
+function writeLogLine(obj) {
+  try {
+    fs.mkdirSync(path.dirname(LOG_FILE), { recursive: true });
+    fs.appendFile(LOG_FILE, JSON.stringify(obj) + '\n', () => {});
+  } catch (e) { /* best effort — 로깅 실패가 API를 망가뜨리면 안 됨 */ }
+}
+function logUserAction(user, action, value) {
+  writeLogLine({
+    ts: new Date().toISOString(),
+    type: 'user_action',
+    session_id: user ? user.session_id : null,
+    nickname: user ? user.nickname : null,
+    action,
+    ...(value !== undefined ? { value } : {}),
+  });
+}
+function logError(action, err, extra) {
+  writeLogLine({
+    ts: new Date().toISOString(),
+    type: 'error',
+    action: action || null,
+    msg: err && err.message,
+    stack: err && err.stack,
+    ...(extra || {}),
+  });
+}
+process.on('uncaughtException', (e) => logError(null, e));
+process.on('unhandledRejection', (e) => logError(null, e));
 
 // ---------- 쿠키 ----------
 function parseCookies(req) {
@@ -182,6 +215,7 @@ app.post('/api', async (req, res) => {
           [sessionId, nick, token]);
         res.setHeader('Set-Cookie', loginCookies(token, nick));
         io.emit('users_changed');
+        logUserAction({ session_id: sessionId, nickname: nick }, 'register', { nickname: nick });
         return ok(res, { nickname: nick });
       }
 
@@ -196,6 +230,7 @@ app.post('/api', async (req, res) => {
         await pool.query('UPDATE users SET nickname = ? WHERE user_id = ?', [nick, u.user_id]);
         res.setHeader('Set-Cookie', loginCookies(parseCookies(req).pg_token, nick));
         io.emit('users_changed');
+        logUserAction(u, 'rename', { from: u.nickname, to: nick });
         return ok(res, { nickname: nick });
       }
 
@@ -215,6 +250,7 @@ app.post('/api', async (req, res) => {
           'INSERT INTO questions (game_type, question_text, created_by) VALUES (?, ?, ?)',
           [type, text, u.user_id]);
         io.emit('questions_changed');
+        logUserAction(u, 'add_question', { game_type: type, text });
         return ok(res);
       }
 
@@ -243,6 +279,7 @@ app.post('/api', async (req, res) => {
           [status, qid]);
         if (r.affectedRows === 0) return fail(res, '질문을 찾을 수 없습니다', 404);
         io.emit('questions_changed');
+        logUserAction(u, 'set_question_status', { question_id: qid, status });
         return ok(res);
       }
 
@@ -282,6 +319,7 @@ app.post('/api', async (req, res) => {
           total: await eligibleVoterCount(),
           candidates: g.game_type === 'image' ? await candidates() : [],
         });
+        logUserAction(u, 'start_game', { game_id: gid, question_id: qid, game_type: g.game_type });
         return ok(res, { game_id: gid });
       }
 
@@ -325,6 +363,7 @@ app.post('/api', async (req, res) => {
         const g = await activeGame();
         if (!g || Number(g.game_id) !== gid) return fail(res, '진행 중인 게임이 아닙니다');
         if (await userVoted(gid, u.user_id)) return fail(res, '이미 투표했습니다');
+        let voteDetail;
         if (g.game_type === 'image') {
           const tid = parseInt(input.target_user_id || '0', 10);
           const [trows] = await pool.query(
@@ -335,12 +374,14 @@ app.post('/api', async (req, res) => {
             `INSERT INTO answers (game_id, voter_user_id, target_user_id, target_nickname)
              VALUES (?, ?, ?, ?)`,
             [gid, u.user_id, tid, t.nickname]);
+          voteDetail = { target_user_id: tid, target_nickname: t.nickname };
         } else {
           const choice = input.choice || '';
           if (!['O', 'X'].includes(choice)) return fail(res, 'O 또는 X를 선택해주세요');
           await pool.query(
             'INSERT INTO answers (game_id, voter_user_id, choice) VALUES (?, ?, ?)',
             [gid, u.user_id, choice]);
+          voteDetail = { choice };
         }
         const finished = await finishGameIfComplete(gid);
         if (finished) {
@@ -352,6 +393,7 @@ app.post('/api', async (req, res) => {
             total: await eligibleVoterCount(),
           });
         }
+        logUserAction(u, 'vote', { game_id: gid, ...voteDetail, finished });
         return ok(res, { finished });
       }
 
@@ -401,6 +443,7 @@ app.post('/api', async (req, res) => {
           io.emit('game_finished', await finishedPayload(Number(g.game_id)));
         }
         io.emit('users_changed');
+        logUserAction(u, 'delete_user', { user_id: uid });
         return ok(res);
       }
 
@@ -409,6 +452,7 @@ app.post('/api', async (req, res) => {
     }
   } catch (e) {
     console.error('API error:', e.message);
+    logError(action, e);
     return fail(res, '서버 오류가 발생했습니다', 500);
   }
 });
