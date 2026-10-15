@@ -228,7 +228,13 @@ function updateProgress(voted, total) {
 async function doVote(gameId, params) {
   const r = await api('vote', Object.assign({ game_id: gameId }, params));
   if (!r.ok) { alert(r.error); return; }
-  if (!r.finished) syncGroup();
+  if (r.finished) {
+    // 내가 마지막 투표자면 소켓 이벤트를 기다리지 않고 결과보기 버튼을 바로 띄움
+    const g = await api('game_results', { game_id: gameId });
+    if (g.ok && !localStorage.getItem('dismissed_' + gameId)) showResultButton(g);
+  } else {
+    syncGroup();
+  }
 }
 
 function hideGamePanel() {
@@ -240,6 +246,20 @@ function hideGamePanel() {
 }
 
 // ---------- 결과 ----------
+// 투표 종료 시 결과를 바로 보여주지 않고 "결과보기" 버튼을 먼저 띄움 (각자 눌러서 확인)
+let pendingResult = null;
+function showResultButton(f) {
+  pendingResult = f;
+  const typeLabel = f.game_type === 'image' ? '🖼️ 이미지게임' : '⭕❌ OX게임';
+  const m = openModal(`
+    <h3 class="font-bold text-lg">🎉 투표 종료!</h3>
+    <div class="text-sm text-slate-400">${typeLabel} · ${esc(f.question_text)}</div>
+    <button class="w-full min-h-[52px] rounded-xl bg-amber-500 active:bg-amber-400 text-slate-950 font-bold text-lg" id="m-ok">결과보기</button>`);
+  m.querySelector('#m-ok').onclick = () => {
+    pendingResult = null;
+    showResults(f);
+  };
+}
 function showResults(f) {
   const typeLabel = f.game_type === 'image' ? '🖼️ 이미지게임 결과' : '⭕❌ OX게임 결과';
   let body = '';
@@ -294,6 +314,7 @@ function connectSocket() {
   socket.on('participants_changed', () => syncGroup());
 
   socket.on('game_started', (d) => {
+    if (pendingResult) { pendingResult = null; closeModal(); }
     renderGamePanel({
       game_id: d.game_id,
       game_type: d.game_type,
@@ -314,7 +335,8 @@ function connectSocket() {
   socket.on('game_finished', (d) => {
     hideGamePanel();
     syncGroup();
-    if (!localStorage.getItem('dismissed_' + d.game_id)) showResults(d);
+    if (pendingResult && pendingResult.game_id === d.game_id) return;
+    if (!localStorage.getItem('dismissed_' + d.game_id)) showResultButton(d);
   });
 
   return socket;
