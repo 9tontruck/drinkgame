@@ -12,34 +12,46 @@
 <div class="max-w-md mx-auto min-h-screen flex flex-col">
 
   <header class="sticky top-0 z-20 bg-slate-950/95 backdrop-blur border-b border-slate-800 px-4 py-3 flex items-center justify-between">
-    <span class="text-lg font-bold">🎮 파티게임</span>
+    <span class="flex items-center gap-2">
+      <button id="btn-back" class="hidden text-sm px-2 py-2 text-slate-300">‹ 뒤로</button>
+      <span class="text-lg font-bold" id="title">🎮 파티게임</span>
+    </span>
     <span class="flex items-center gap-2">
       <span id="nickname" class="text-sm text-slate-300 max-w-[120px] truncate"></span>
       <button id="btn-rename" class="text-xs px-3 py-2 rounded-lg bg-slate-800 active:bg-slate-700 min-h-[44px]">닉네임 바꾸기</button>
     </span>
   </header>
 
-  <!-- 진행 중 게임 패널 (제일 위, sticky) -->
-  <div id="game-panel" class="hidden sticky top-[57px] z-10"></div>
-
-  <main class="flex-1 px-4 py-4 space-y-4 relative">
-    <section class="bg-slate-900 rounded-2xl p-4 space-y-3">
-      <h2 class="font-semibold text-base">질문 추가</h2>
-      <button id="btn-add-image" class="w-full min-h-[52px] rounded-xl bg-indigo-600 active:bg-indigo-500 font-semibold">🖼️ 이미지게임 질문 추가</button>
-      <button id="btn-add-ox" class="w-full min-h-[52px] rounded-xl bg-indigo-600 active:bg-indigo-500 font-semibold">⭕❌ OX게임 질문 추가</button>
-    </section>
-
-    <section class="bg-slate-900 rounded-2xl p-4 space-y-3">
-      <h2 class="font-semibold text-base">게임 시작</h2>
-      <button id="btn-start-image" class="w-full min-h-[52px] rounded-xl bg-emerald-600 active:bg-emerald-500 font-semibold">🖼️ 이미지게임 질문 선택</button>
-      <button id="btn-start-ox" class="w-full min-h-[52px] rounded-xl bg-emerald-600 active:bg-emerald-500 font-semibold">⭕❌ OX게임 질문 선택</button>
-    </section>
-
-    <!-- 게임 진행 중: 아래 버튼 막는 오버레이 (게임 끝나면 같이 사라짐) -->
-    <div id="game-overlay" class="hidden absolute inset-0 z-[5] bg-slate-950/85 backdrop-blur-[2px] flex items-start justify-center pt-24">
-      <span class="text-sm font-semibold text-slate-200 bg-slate-800/95 border border-slate-700 px-4 py-2 rounded-full">🎮 게임 진행 중…</span>
-    </div>
+  <!-- 그룹 목록 -->
+  <main id="view-groups" class="flex-1 px-4 py-4 space-y-3">
+    <h2 class="font-semibold text-base text-slate-300">그룹 선택</h2>
+    <div id="group-list" class="space-y-3"></div>
   </main>
+
+  <!-- 그룹 로비 -->
+  <div id="view-group" class="hidden flex-1 flex-col">
+    <div id="game-panel" class="hidden sticky top-[57px] z-10"></div>
+    <main class="flex-1 px-4 py-4 space-y-4 relative">
+      <div class="flex items-center justify-between">
+        <h2 class="font-semibold text-base" id="group-name"></h2>
+        <span class="text-xs text-slate-400" id="group-members"></span>
+      </div>
+      <section class="bg-slate-900 rounded-2xl p-4 space-y-3">
+        <h3 class="font-semibold text-sm text-slate-300">질문 추가</h3>
+        <button id="btn-add-image" class="w-full min-h-[52px] rounded-xl bg-indigo-600 active:bg-indigo-500 font-semibold">🖼️ 이미지게임 질문 추가</button>
+        <button id="btn-add-ox" class="w-full min-h-[52px] rounded-xl bg-indigo-600 active:bg-indigo-500 font-semibold">⭕❌ OX게임 질문 추가</button>
+      </section>
+      <section class="bg-slate-900 rounded-2xl p-4 space-y-3">
+        <h3 class="font-semibold text-sm text-slate-300">게임 시작</h3>
+        <button id="btn-start-image" class="w-full min-h-[52px] rounded-xl bg-emerald-600 active:bg-emerald-500 font-semibold disabled:opacity-40">🖼️ 이미지 게임 시작</button>
+        <button id="btn-start-ox" class="w-full min-h-[52px] rounded-xl bg-emerald-600 active:bg-emerald-500 font-semibold disabled:opacity-40">⭕❌ OX 게임 시작</button>
+      </section>
+      <!-- 게임 진행 중: 아래 버튼 막는 오버레이 (게임 끝나면 같이 사라짐) -->
+      <div id="game-overlay" class="hidden absolute inset-0 z-[5] bg-slate-950/85 backdrop-blur-[2px] flex items-start justify-center pt-24">
+        <span class="text-sm font-semibold text-slate-200 bg-slate-800/95 border border-slate-700 px-4 py-2 rounded-full">🎮 게임 진행 중…</span>
+      </div>
+    </main>
+  </div>
 </div>
 
 <!-- 모달 루트 (bottom-sheet) -->
