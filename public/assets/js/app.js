@@ -247,18 +247,46 @@ function hideGamePanel() {
 
 // ---------- 결과 ----------
 // 투표 종료 시 결과를 바로 보여주지 않고 "결과보기" 버튼을 먼저 띄움 (각자 눌러서 확인)
+// OX게임은 10초 카운트다운 후 버튼 활성화
 let pendingResult = null;
+let resultCountdownTimer = null;
+function clearResultCountdown() {
+  if (resultCountdownTimer) { clearTimeout(resultCountdownTimer); resultCountdownTimer = null; }
+}
 function showResultButton(f) {
+  clearResultCountdown();
   pendingResult = f;
   const typeLabel = f.game_type === 'image' ? '🖼️ 이미지게임' : '⭕❌ OX게임';
   const m = openModal(`
     <h3 class="font-bold text-lg">🎉 투표 종료!</h3>
     <div class="text-sm text-slate-400">${typeLabel} · ${esc(f.question_text)}</div>
-    <button class="w-full min-h-[52px] rounded-xl bg-amber-500 active:bg-amber-400 text-slate-950 font-bold text-lg" id="m-ok">결과보기</button>`);
-  m.querySelector('#m-ok').onclick = () => {
+    <button class="w-full min-h-[52px] rounded-xl bg-amber-500 active:bg-amber-400 text-slate-950 font-bold text-lg disabled:opacity-50" id="m-ok">결과보기</button>`);
+  const btn = m.querySelector('#m-ok');
+  const reveal = () => {
+    clearResultCountdown();
     pendingResult = null;
     showResults(f);
   };
+  if (f.game_type !== 'ox') {
+    btn.textContent = '결과보기';
+    btn.onclick = reveal;
+    return;
+  }
+  let n = 10;
+  btn.disabled = true;
+  const tick = () => {
+    if (!document.contains(btn)) return; // 모달이 닫혔으면 중단
+    if (n <= 0) {
+      btn.textContent = '결과보기';
+      btn.disabled = false;
+      btn.onclick = reveal;
+      return;
+    }
+    btn.textContent = `결과보기(${n})`;
+    n--;
+    resultCountdownTimer = setTimeout(tick, 1000);
+  };
+  tick();
 }
 function showResults(f) {
   const typeLabel = f.game_type === 'image' ? '🖼️ 이미지게임 결과' : '⭕❌ OX게임 결과';
@@ -314,7 +342,7 @@ function connectSocket() {
   socket.on('participants_changed', () => syncGroup());
 
   socket.on('game_started', (d) => {
-    if (pendingResult) { pendingResult = null; closeModal(); }
+    if (pendingResult) { pendingResult = null; clearResultCountdown(); closeModal(); }
     renderGamePanel({
       game_id: d.game_id,
       game_type: d.game_type,
