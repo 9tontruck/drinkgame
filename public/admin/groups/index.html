@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=no">
+<title>그룹 관리</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<link rel="stylesheet" href="../../assets/css/style.css">
+</head>
+<body data-page="group-detail" class="bg-slate-950 text-slate-100 min-h-screen">
+<div class="max-w-md mx-auto min-h-screen flex flex-col">
+  <header class="sticky top-0 z-20 bg-slate-950/95 backdrop-blur border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+    <span class="font-bold" id="g-title">그룹 관리</span>
+    <a href="../" class="text-xs px-3 py-2 rounded-lg bg-slate-800 active:bg-slate-700 min-h-[44px] inline-flex items-center">← 어드민</a>
+  </header>
+  <main class="flex-1 px-4 py-4 space-y-4">
+    <section class="bg-slate-900 rounded-2xl p-4 space-y-3">
+      <h2 class="font-semibold text-base">참가자 <span class="text-xs text-slate-400 font-normal">— 이미지게임 투표 후보</span></h2>
+      <div class="flex gap-2">
+        <input id="p-name" type="text" maxlength="50" placeholder="참가자 이름"
+          class="flex-1 min-h-[52px] px-4 rounded-xl bg-slate-800 border border-slate-700 text-base outline-none focus:border-indigo-500">
+        <button id="btn-add-p" class="shrink-0 px-4 min-h-[52px] rounded-xl bg-indigo-600 active:bg-indigo-500 font-semibold">추가</button>
+      </div>
+      <div id="p-list" class="space-y-2"></div>
+    </section>
+    <section class="bg-slate-900 rounded-2xl p-4 space-y-3">
+      <h2 class="font-semibold text-base">🖼️ 이미지게임 질문</h2>
+      <div id="q-image" class="space-y-2"></div>
+    </section>
+    <section class="bg-slate-900 rounded-2xl p-4 space-y-3">
+      <h2 class="font-semibold text-base">⭕❌ OX게임 질문</h2>
+      <div id="q-ox" class="space-y-2"></div>
+    </section>
+  </main>
+</div>
+<script src="../../assets/js/admin.js"></script>
+</body>
+</html>
