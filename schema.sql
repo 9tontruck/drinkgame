@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
   INDEX idx_session (session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS groups (
+CREATE TABLE IF NOT EXISTS `groups` (
   group_id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS participants (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_participant (group_id, name),
   INDEX idx_group (group_id),
-  FOREIGN KEY (group_id) REFERENCES groups (group_id) ON DELETE CASCADE
+  FOREIGN KEY (group_id) REFERENCES `groups` (group_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 그룹에 참가한 유저 = 투표자
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS group_members (
   PRIMARY KEY (user_id, group_id),
   INDEX idx_group (group_id),
   FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE,
-  FOREIGN KEY (group_id) REFERENCES groups (group_id) ON DELETE CASCADE
+  FOREIGN KEY (group_id) REFERENCES `groups` (group_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS questions (
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS questions (
   created_by INT UNSIGNED NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_group_type_status (group_id, game_type, status),
-  FOREIGN KEY (group_id) REFERENCES groups (group_id) ON DELETE CASCADE
+  FOREIGN KEY (group_id) REFERENCES `groups` (group_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS games (
@@ -62,12 +62,12 @@ CREATE TABLE IF NOT EXISTS games (
   game_type ENUM('image','ox') NOT NULL,
   status ENUM('active','finished') NOT NULL DEFAULT 'active',
   active_lock VARCHAR(32) GENERATED ALWAYS AS
-    (IF(status = 'active', CONCAT(group_id, ':'), NULL)) STORED,
+    (IF(status = 'active', CONCAT(group_id, ':'), NULL)) VIRTUAL,
   started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   finished_at DATETIME NULL DEFAULT NULL,
   UNIQUE KEY uq_active (active_lock),
   INDEX idx_group_status (group_id, status),
-  FOREIGN KEY (group_id) REFERENCES groups (group_id) ON DELETE CASCADE,
+  FOREIGN KEY (group_id) REFERENCES `groups` (group_id) ON DELETE CASCADE,
   FOREIGN KEY (question_id) REFERENCES questions (question_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

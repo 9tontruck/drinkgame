@@ -122,7 +122,7 @@ async function nicknameTaken(nick, exceptId = null) {
 const roomOf = (gid) => `group:${gid}`;
 
 async function getGroup(gid) {
-  const [rows] = await pool.query('SELECT * FROM groups WHERE group_id = ?', [gid]);
+  const [rows] = await pool.query('SELECT * FROM `groups` WHERE group_id = ?', [gid]);
   return rows[0] || null;
 }
 async function isMember(userId, groupId) {
@@ -317,7 +317,7 @@ app.post('/api', async (req, res) => {
                 (SELECT COUNT(*) FROM group_members gm
                  JOIN users u ON u.user_id = gm.user_id
                  WHERE gm.group_id = g.group_id AND u.deleted_at IS NULL) AS members
-         FROM groups g ORDER BY g.group_id DESC`);
+         FROM \`groups\` g ORDER BY g.group_id DESC`);
       return ok(res, {
         groups: rows.map((r) => ({
           group_id: r.group_id,
@@ -339,7 +339,7 @@ app.post('/api', async (req, res) => {
           .filter((s) => s !== '' && [...s].length <= 50)
       )];
       if (names.length === 0) return fail(res, '참가자를 1명 이상 입력해주세요');
-      const [r] = await pool.query('INSERT INTO groups (name) VALUES (?)', [name]);
+      const [r] = await pool.query('INSERT INTO `groups` (name) VALUES (?)', [name]);
       const gid = r.insertId;
       for (const n of names) {
         await pool.query(
