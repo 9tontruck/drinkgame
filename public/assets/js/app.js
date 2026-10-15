@@ -1,4 +1,4 @@
-// 파티게임 유저 페이지 — Socket.io 실시간 (폴링 없음)
+// 파티게임 v3 유저 페이지 — 그룹 기반, Socket.io 실시간 (폴링 없음)
 const $ = (s) => document.querySelector(s);
 
 async function api(action, params = {}) {
@@ -65,44 +65,118 @@ function questionModal(gameType) {
   m.querySelector('#m-ok').onclick = async () => {
     const text = m.querySelector('#q-text').value.trim();
     if (!text) { alert('질문을 입력해주세요'); return; }
-    const r = await api('add_question', { game_type: gameType, text });
+    const r = await api('add_question', { group_id: currentGroupId, game_type: gameType, text });
     if (!r.ok) { alert(r.error); return; }
     closeModal();
     alert('질문이 등록됐습니다');
   };
 }
 
-async function startPickModal(gameType) {
-  const label = gameType === 'image' ? '이미지게임' : 'OX게임';
-  const r = await api('list_new_questions', { game_type: gameType });
+// ---------- 그룹 목록 ----------
+let socket = null;
+let currentGroupId = null;
+let currentGame = null;
+
+async function loadGroups() {
+  const r = await api('list_groups');
   if (!r.ok) { alert(r.error); return; }
-  if (!r.questions.length) { alert('시작할 수 있는 질문이 없습니다 (status=new 질문 없음)'); return; }
-  const items = r.questions.map((q, i) =>
-    `<label class="flex items-center gap-3 p-3 rounded-xl bg-slate-800 active:bg-slate-700 min-h-[52px]">
-      <input type="radio" name="qpick" value="${q.question_id}" class="w-5 h-5 accent-indigo-500" ${i === 0 ? 'checked' : ''}>
-      <span class="text-sm">${esc(q.question_text)}</span>
-    </label>`
-  ).join('');
-  const m = openModal(`
-    <h3 class="font-bold text-lg">${label} 질문 선택</h3>
-    <div class="space-y-2 max-h-[40vh] overflow-y-auto">${items}</div>
-    <div class="flex gap-2">
-      <button class="flex-1 min-h-[52px] rounded-xl bg-slate-800 active:bg-slate-700 font-semibold" id="m-cancel">취소</button>
-      <button class="flex-1 min-h-[52px] rounded-xl bg-emerald-600 active:bg-emerald-500 font-semibold" id="m-ok">시작</button>
-    </div>`);
-  m.querySelector('#m-cancel').onclick = closeModal;
-  m.querySelector('#m-ok').onclick = async () => {
-    const sel = m.querySelector('input[name=qpick]:checked');
-    if (!sel) { alert('질문을 선택해주세요'); return; }
-    const r2 = await api('start_game', { question_id: sel.value });
-    if (!r2.ok) { alert(r2.error); return; }
-    closeModal();
-  };
+  const list = $('#group-list');
+  if (!r.groups.length) {
+    list.innerHTML = '<div class="text-slate-500 text-sm text-center py-8">아직 그룹이 없습니다.<br>어드민에서 그룹을 만들어주세요.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  for (const g of r.groups) {
+    const card = document.createElement('button');
+    card.className = 'w-full text-left bg-slate-900 rounded-2xl p-4 space-y-1 active:bg-slate-800 min-h-[76px]';
+    card.innerHTML = `
+      <div class="font-bold text-base">${esc(g.name)}</div>
+      <div class="text-xs text-slate-400">👥 ${g.members}명 참가 중</div>`;
+    card.onclick = () => onTapGroup(g.group_id);
+    list.appendChild(card);
+  }
+}
+
+async function onTapGroup(gid) {
+  const r = await api('group_state', { group_id: gid });
+  if (!r.ok) { alert(r.error); return; }
+  if (!r.is_member) {
+    // 참가 확인 모달
+    const m = openModal(`
+      <h3 class="font-bold text-lg">${esc(r.group.name)}</h3>
+      <div class="text-sm text-slate-400">👥 ${r.members}명 참가 중</div>
+      <div class="flex gap-2">
+        <button class="flex-1 min-h-[52px] rounded-xl bg-slate-800 active:bg-slate-700 font-semibold" id="m-cancel">취소</button>
+        <button class="flex-1 min-h-[52px] rounded-xl bg-emerald-600 active:bg-emerald-500 font-semibold" id="m-ok">참가하기</button>
+      </div>`);
+    m.querySelector('#m-cancel').onclick = closeModal;
+    m.querySelector('#m-ok').onclick = async () => {
+      const j = await api('join_group', { group_id: gid });
+      if (!j.ok) { alert(j.error); return; }
+      closeModal();
+      enterGroup(gid);
+    };
+    return;
+  }
+  enterGroup(gid);
+}
+
+function enterGroup(gid) {
+  if (currentGroupId) socket.emit('leave_room', { group_id: currentGroupId });
+  currentGroupId = gid;
+  hideGamePanel();
+  $('#view-groups').classList.add('hidden');
+  const vg = $('#view-group');
+  vg.classList.remove('hidden');
+  vg.classList.add('flex');
+  $('#btn-back').classList.remove('hidden');
+  socket.emit('join_room', { group_id: gid });
+  syncGroup();
+}
+
+function exitGroup() {
+  socket.emit('leave_room', { group_id: currentGroupId });
+  currentGroupId = null;
+  hideGamePanel();
+  const vg = $('#view-group');
+  vg.classList.add('hidden');
+  vg.classList.remove('flex');
+  $('#view-groups').classList.remove('hidden');
+  $('#btn-back').classList.add('hidden');
+  $('#title').textContent = '🎮 파티게임';
+  loadGroups();
+}
+
+// ---------- 그룹 로비 ----------
+async function syncGroup() {
+  if (!currentGroupId) return;
+  try {
+    const r = await api('group_state', { group_id: currentGroupId });
+    if (!r.ok) return;
+    $('#title').textContent = '🎮 ' + r.group.name;
+    $('#group-name').textContent = r.group.name;
+    $('#group-members').textContent = `👥 ${r.members}명`;
+    const bi = $('#btn-start-image');
+    const bo = $('#btn-start-ox');
+    bi.textContent = `🖼️ 이미지 게임 시작 (질문 ${r.new_counts.image}개)`;
+    bo.textContent = `⭕❌ OX 게임 시작 (질문 ${r.new_counts.ox}개)`;
+    bi.disabled = r.new_counts.image === 0;
+    bo.disabled = r.new_counts.ox === 0;
+    if (r.active) {
+      renderGamePanel(r.active);
+    } else {
+      hideGamePanel();
+    }
+  } catch (e) { /* 무시 */ }
+}
+
+async function startGame(gameType) {
+  const r = await api('start_game', { group_id: currentGroupId, game_type: gameType });
+  if (!r.ok) { alert(r.error); return; }
+  // 게임 시작은 소켓 이벤트(game_started)로 패널 표시
 }
 
 // ---------- 게임 패널 ----------
-let currentGame = null;
-
 function renderGamePanel(g) {
   currentGame = g;
   const panel = $('#game-panel');
@@ -112,7 +186,7 @@ function renderGamePanel(g) {
     body = `<div class="text-center py-4 text-emerald-400 font-bold text-lg">✅ 선택완료</div>`;
   } else if (g.game_type === 'image') {
     body = `<div class="grid grid-cols-2 gap-2">` + g.candidates.map((c) =>
-      `<button class="min-h-[56px] px-2 rounded-xl bg-slate-800 active:bg-indigo-600 font-semibold text-sm truncate" data-vote-user="${c.user_id}">${esc(c.nickname)}</button>`
+      `<button class="min-h-[56px] px-2 rounded-xl bg-slate-800 active:bg-indigo-600 font-semibold text-sm truncate" data-vote-pid="${c.participant_id}">${esc(c.name)}</button>`
     ).join('') + `</div>`;
   } else {
     body = `<div class="grid grid-cols-2 gap-2">
@@ -136,8 +210,8 @@ function renderGamePanel(g) {
   panel.classList.remove('hidden');
   $('#game-overlay').classList.remove('hidden');
 
-  panel.querySelectorAll('[data-vote-user]').forEach((b) => {
-    b.onclick = () => doVote(g.game_id, { target_user_id: +b.dataset.voteUser });
+  panel.querySelectorAll('[data-vote-pid]').forEach((b) => {
+    b.onclick = () => doVote(g.game_id, { target_participant_id: +b.dataset.votePid });
   });
   panel.querySelectorAll('[data-vote-choice]').forEach((b) => {
     b.onclick = () => doVote(g.game_id, { choice: b.dataset.voteChoice });
@@ -154,15 +228,15 @@ function updateProgress(voted, total) {
 async function doVote(gameId, params) {
   const r = await api('vote', Object.assign({ game_id: gameId }, params));
   if (!r.ok) { alert(r.error); return; }
-  // 내 투표 반영("선택완료")은 1회 동기화로, 전원 투표 종료는 소켓 이벤트로
-  if (!r.finished) syncState();
+  if (!r.finished) syncGroup();
 }
 
 function hideGamePanel() {
   currentGame = null;
-  $('#game-panel').classList.add('hidden');
-  $('#game-panel').innerHTML = '';
-  $('#game-overlay').classList.add('hidden');
+  const panel = $('#game-panel');
+  if (panel) { panel.classList.add('hidden'); panel.innerHTML = ''; }
+  const ov = $('#game-overlay');
+  if (ov) ov.classList.add('hidden');
 }
 
 // ---------- 결과 ----------
@@ -173,7 +247,7 @@ function showResults(f) {
     body = f.results.rows.length
       ? f.results.rows.map((r, i) =>
           `<div class="flex items-center justify-between px-4 py-3 rounded-xl ${i === 0 ? 'bg-amber-500/20 border border-amber-500/50' : 'bg-slate-800'}">
-            <span class="font-semibold">${i === 0 ? '👑 ' : ''}${esc(r.nickname)}</span>
+            <span class="font-semibold">${i === 0 ? '👑 ' : ''}${esc(r.name)}</span>
             <span class="text-amber-300 font-bold">${r.votes}표</span>
           </div>`
         ).join('')
@@ -200,26 +274,24 @@ function showResults(f) {
   };
 }
 
-// ---------- 상태 동기화 (소켓 재접속 시 1회) ----------
-async function syncState() {
-  try {
-    const r = await api('game_state');
-    if (!r.ok) return;
-    if (r.active) {
-      renderGamePanel(r.active);
-    } else {
-      hideGamePanel();
-      const f = r.last_finished;
-      if (f && !localStorage.getItem('dismissed_' + f.game_id)) showResults(f);
-    }
-  } catch (e) { /* 무시 */ }
-}
-
 // ---------- 소켓 ----------
 function connectSocket() {
-  const socket = io();
+  socket = io();
 
-  socket.on('connect', () => syncState());
+  socket.on('connect', () => {
+    if (currentGroupId) {
+      socket.emit('join_room', { group_id: currentGroupId });
+      syncGroup();
+    }
+  });
+
+  socket.on('groups_changed', () => {
+    if (!currentGroupId) loadGroups();
+  });
+
+  socket.on('questions_changed', () => syncGroup());
+  socket.on('users_changed', () => syncGroup());
+  socket.on('participants_changed', () => syncGroup());
 
   socket.on('game_started', (d) => {
     renderGamePanel({
@@ -241,6 +313,7 @@ function connectSocket() {
 
   socket.on('game_finished', (d) => {
     hideGamePanel();
+    syncGroup();
     if (!localStorage.getItem('dismissed_' + d.game_id)) showResults(d);
   });
 
@@ -253,13 +326,15 @@ async function init() {
   if (r.ok && r.user) {
     $('#nickname').textContent = r.user.nickname;
     connectSocket();
+    loadGroups();
   } else {
     nickModal('register');
   }
   $('#btn-rename').onclick = () => nickModal('rename');
+  $('#btn-back').onclick = exitGroup;
   $('#btn-add-image').onclick = () => questionModal('image');
   $('#btn-add-ox').onclick = () => questionModal('ox');
-  $('#btn-start-image').onclick = () => startPickModal('image');
-  $('#btn-start-ox').onclick = () => startPickModal('ox');
+  $('#btn-start-image').onclick = () => startGame('image');
+  $('#btn-start-ox').onclick = () => startGame('ox');
 }
 document.addEventListener('DOMContentLoaded', init);
