@@ -468,6 +468,49 @@ app.post('/api', async (req, res) => {
       return ok(res);
     }
 
+    // ----- 그룹 멤버 = 참가자 (어드민) -----
+    if (action === 'list_group_members') {
+      const gid = parseInt(input.group_id || '0', 10);
+      if (!(await getGroup(gid))) return fail(res, '그룹을 찾을 수 없습니다', 404);
+      const [rows] = await pool.query(
+        `SELECT u.user_id, u.nickname, gm.joined_at AS joined_at
+         FROM group_members gm JOIN users u ON u.user_id = gm.user_id
+         WHERE gm.group_id = ? AND u.deleted_at IS NULL ORDER BY gm.joined_at`,
+        [gid]);
+      return ok(res, { members: rows });
+    }
+
+    if (action === 'remove_group_member') {
+      const u = await requireUser(req, res);
+      if (!u) return;
+      const gid = parseInt(input.group_id || '0', 10);
+      const uid = parseInt(input.user_id || '0', 10);
+      if (!(await getGroup(gid))) return fail(res, '그룹을 찾을 수 없습니다', 404);
+      const [dr] = await pool.query(
+        'DELETE FROM group_members WHERE group_id = ? AND user_id = ?', [gid, uid]);
+      if (dr.affectedRows === 0) return fail(res, '참가자를 찾을 수 없습니다', 404);
+      // 진행 중 게임: 이 멤버의 투표 삭제 + 종료 조건 재계산 (투표 카운트에서 제외)
+      const ag = await activeGame(gid);
+      if (ag) {
+        await pool.query('DELETE FROM answers WHERE game_id = ? AND voter_user_id = ?',
+          [ag.game_id, uid]);
+        const fg = await finishGameIfComplete(Number(ag.game_id));
+        if (fg) {
+          io.to(roomOf(fg.group_id)).emit('game_finished', await finishedPayload(fg.game_id));
+        } else {
+          io.to(roomOf(gid)).emit('vote_progress', {
+            game_id: Number(ag.game_id),
+            voted: await votesCast(Number(ag.game_id)),
+            total: await eligibleVoterCount(gid),
+          });
+        }
+      }
+      logUserAction(u, 'remove_group_member', { group_id: gid, user_id: uid });
+      io.to(roomOf(gid)).emit('members_changed', {});
+      io.to(roomOf(gid)).emit('users_changed', {});
+      return ok(res);
+    }
+
     // ----- 게임 -----
     if (action === 'start_game') {
       const gid = parseInt(input.group_id || '0', 10);
