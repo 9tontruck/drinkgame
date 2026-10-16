@@ -53,6 +53,33 @@ async function loadGroupDetail() {
   if (!gs.ok) { alert(gs.error); location.href = '../'; return; }
   document.getElementById('g-title').textContent = '⚙️ ' + gs.group.name;
 
+  // 참가자 = 그룹에 조인한 유저 (투표자)
+  const mr = await api('list_group_members', { group_id: gid });
+  if (mr.ok) {
+    const box = document.getElementById('m-list');
+    box.innerHTML = mr.members.length ? '' : '<div class="text-slate-500 text-xs">없음</div>';
+    for (const m of mr.members) {
+      const div = document.createElement('div');
+      div.className = 'p-3 rounded-xl bg-slate-800 flex items-center justify-between gap-2';
+      const joined = (m.joined_at || '').slice(0, 16).replace('T', ' ');
+      div.innerHTML = `
+        <div class="min-w-0">
+          <div class="font-semibold text-sm truncate">${esc(m.nickname)}</div>
+          <div class="text-[11px] text-slate-500">조인 ${esc(joined)}</div>
+        </div>
+        <button class="shrink-0 text-xs px-3 py-2 min-h-[44px] rounded-lg bg-rose-600 active:bg-rose-500 font-semibold"
+          data-uid="${m.user_id}">삭제</button>`;
+      box.appendChild(div);
+    }
+    box.querySelectorAll('[data-uid]').forEach((b) => {
+      b.onclick = async () => {
+        if (!confirm('이 참가자를 그룹에서 삭제할까요? (투표 카운트에서 제외됩니다)')) return;
+        const r2 = await api('remove_group_member', { group_id: gid, user_id: +b.dataset.uid });
+        if (!r2.ok) { alert(r2.error); return; }
+      };
+    });
+  }
+
   const pr = await api('list_participants', { group_id: gid });
   if (pr.ok) {
     const box = document.getElementById('p-list');
@@ -172,6 +199,7 @@ function connectSocket() {
   socket.on('groups_changed', () => { if (page === 'groups') loadAdminGroups(); });
   socket.on('questions_changed', () => { if (page === 'group-detail') loadGroupDetail(); });
   socket.on('participants_changed', () => { if (page === 'group-detail') loadGroupDetail(); });
+  socket.on('members_changed', () => { if (page === 'group-detail') loadGroupDetail(); });
   socket.on('users_changed', reload);
 }
 
